@@ -1,0 +1,389 @@
+#**********************************************************************
+    Modify the timezone settings below to reflect your location.
+    
+    The iCal name/description properties are based on the calling page.
+
+    Note About Extra Whitespace Added by Velocity:    
+    iCal files are picky with whitespace, so remove all unecessary 
+    spacing and all comments. Required line breaks include those 
+    used for the actual iCal data, the line break for the recurring rule (in 
+    outputEventItems macro), and the line break within the splitLinetoLength
+    macro (specifically where the new string and substring are merged together).
+***********************************************************************#
+
+## Timezone information for the iCal data.
+#set ($tzName = "America/New_York")
+#set ($tzStandard = {"abbrev":"EST", "offset":"-0500"})
+#set ($tzDaylight = {"abbrev":"EDT", "offset":"-0400"})
+
+#**********************************************************************
+    There should be no need to edit below this line.
+***********************************************************************#
+
+## Lookup for the day checkboxes in the data definition.
+#set ($daysMap = { "Sun":"SU", "Mon":"MO", "Tue":"TU", "Wed":"WE", "Thu":"TH", "Fri":"FR", "Sat":"SA" })
+
+## Output the actual iCal data.
+#set ( $iCalData = "#outputICal" )
+<![CDATA[#protect-top
+${iCalData}
+#protect-top]]>
+
+#*
+    Outputs the iCal data. Event data is generated with the "outputEventItems" macro 
+    and merged into place.
+*#
+#macro (outputICal)
+  #set ($callingPage = $_XPathTool.selectSingleNode($contentRoot, "//calling-page/system-page"))
+  #set ($callingPageDesc = $callingPage.getChild("description").value)
+
+  ## Set the iCal name.
+  #set ($iCalName = $callingPage.getChild("title").value)
+  #set ($iCalName = "#splitLinetoLength($iCalName)")
+  #set ($iCalName = $iCalName.trim())
+
+  ## Set the iCal description.
+  #set ($iCalDesc = "X-WR-CALDESC:")
+  #if ($callingPageDesc && $callingPageDesc != "")
+    #set ($iCalDesc = "${iCalDesc}${callingPageDesc}")
+    #set ($iCalDesc = "#splitLinetoLength($iCalDesc)")
+    #set ($iCalDesc = $iCalDesc.trim())
+  #end
+
+  ## Get the event items.
+  #set ($eventItems = "#outputEventItems()")
+  #set ($eventItems = $eventItems.trim())
+
+  ## Output the iCal data.
+  BEGIN:VCALENDAR
+  PRODID:-//HH//NONSGML Cascade Server//EN
+  VERSION:2.0
+  X-WR-CALNAME:${iCalName}
+  X-WR-TIMEZONE:${tzName}
+  ${iCalDesc}
+  BEGIN:VTIMEZONE
+  TZID:${tzName}
+  BEGIN:DAYLIGHT
+  TZOFFSETFROM:${tzStandard.get("offset")}
+  TZOFFSETTO:${tzDaylight.get("offset")}
+  TZNAME:${tzDaylight.get("abbrev")}
+  DTSTART:19700308T020000
+  RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+  END:DAYLIGHT
+  BEGIN:STANDARD
+  TZOFFSETFROM:${tzDaylight.get("offset")}
+  TZOFFSETTO:${tzStandard.get("offset")}
+  TZNAME:${tzStandard.get("abbrev")}
+  DTSTART:19701101T020000
+  RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+  END:STANDARD
+  END:VTIMEZONE
+  $eventItems
+  END:VCALENDAR
+#end
+
+#*
+    Loops through pages in an "event index block" and outputs the params/properties for each
+    individual event. Recurrence rule macros are called for the different frequency types.
+*#
+#macro (outputEventItems)
+  #set ($output = "")
+
+  #set ($currentTime = $_XPathTool.selectSingleNode($contentRoot, "/system-index-block/@current-time").value)
+  #set ($currentTime = $_DateTool.getDate($currentTime))
+
+  ## Grab the categories to include.
+  #set ($categoriesXpath = "")
+  #set ($categories = $_XPathTool.selectNodes($contentRoot, "/system-index-block/calling-page/system-page/dynamic-metadata[name='categories']/value"))
+  #if ($categories.size() > 0)
+      #foreach ($category in $categories)
+          #if ($foreach.index == 0)
+              #set ($categoriesXpath = "value = '${category.value}'")
+          #else
+              #set ($categoriesXpath = "${categoriesXpath} or value = '${category.value}'")
+          #end    
+      #end
+      #set ($categoriesXpath = "and (${categoriesXpath})")
+  #end
+
+  #set ($events = $_XPathTool.selectNodes($contentRoot, "/system-index-block//system-page[dynamic-metadata[name = 'categories' ${categoriesXpath}] and not(contains(path, '_cascade')) and not(@current)]"))
+
+  ## Loop through the events.
+  #foreach ($event in $events)
+    #set ($summary = "SUMMARY:")
+    #set ($description = "DESCRIPTION:")
+    #set ($location = "LOCATION:")
+    #set ($dtStart = "DTSTART")
+    #set ($dtEnd = "DTEND")
+
+    #set ($sds = $event.getChild("system-data-structure"))
+
+    #set ($start = $_DateTool.getDate($sds.getChild("starts").value))
+    #set ($startCal = $_DateTool.toCalendar($start))
+    #set ($end = $_DateTool.getDate($sds.getChild("ends").value))
+    #set ($endCal = $_DateTool.toCalendar($end))
+    
+    #set ($eventId = $event.getAttribute("id").value)
+    #set ($eventTitle = $event.getChild("title").value)
+    #set ($eventSummary = $event.getChild("summary").value)
+    #set ($eventLocation = $sds.getChild("location").value)
+
+    #set ($lastModified = $_DateTool.getDate($event.getChild("last-modified").value))
+    #set ($createdOn = $_DateTool.getDate($event.getChild("created-on").value))
+
+    #set ($summary = $event.getChild("title").value)
+    #set ($summary = "SUMMARY:${summary}")
+    #set ($summary = "#splitLinetoLength($summary)")
+    #set ($summary = $summary.trim())
+
+    #if ($eventSummary && $eventSummary != "")
+      #set ($description = "${description}${eventSummary}")
+      #set ($description = "#splitLinetoLength($description)")
+      #set ($description = $description.trim())
+    #end
+
+    #if ($eventLocation && $eventLocation != "")
+      #set ($location = "${location}${eventLocation}")
+      #set ($location = "#splitLinetoLength($location)")
+      #set ($location = $location.trim())
+    #end
+
+    ## Get the event recurrence info based on the frequency.
+    #set ($recurrenceOuput = "")
+    #set ($frequency = $_XPathTool.selectSingleNode($sds, "recurrence/frequency").value)    
+    #if ($frequency == "Daily")
+      #set ($recurrenceOuput = "#outputDailyEvent($event)")
+    #elseif ($frequency == "Weekly")
+      #set ($recurrenceOuput = "#outputWeeklyEvent($event)")
+    #elseif ($frequency == "Monthly")
+      #set ($recurrenceOuput = "#outputMonthlyEvent($event)")
+    #elseif ($frequency == "Yearly")
+      #set ($recurrenceOuput = "#outputYearlyEvent($event)")
+    #end
+    #set ($recurrenceOuput = $recurrenceOuput.trim())
+
+    #if ($recurrenceOuput != "")
+      #set ($recurrenceOuput = "
+      ${recurrenceOuput}")
+    #end
+
+    ## Get the start/end params, differs if the event is all day
+    #if ($sds.getChild("all-day").value != "")
+      #set ($formatStart = $_DateTool.format("yyyyMMdd", $start))
+      #set ($dtStart = "${dtStart};VALUE=DATE:${formatStart}")
+      
+      #set ( $_void = $endCal.add(5, 1) )
+      #set ($formatEnd = $_DateTool.format("yyyyMMdd", $endCal.getTime()))
+      #set ($dtEnd = "${dtEnd};VALUE=DATE:${formatEnd}")
+    #else
+      #set ($formatStart = $_DateTool.format("yyyyMMdd'T'HHmmss", $start))
+      #set ($dtStart = "${dtStart}:${formatStart}")
+      
+      #set ($formatEnd = $_DateTool.format("yyyyMMdd'T'HHmmss", $end))
+      #set ($dtEnd = "${dtEnd}:${formatEnd}")
+    #end
+
+    ## Output the event.
+    BEGIN:VEVENT
+    ${dtStart}
+    ${dtEnd}${recurrenceOuput}
+    DTSTAMP:${_DateTool.format("yyyyMMdd'T'HHmmss", $currentTime)}
+    UID:${eventId}
+    CREATED:${_DateTool.format("yyyyMMdd'T'HHmmss", $createdOn)}
+    ${description}
+    LAST-MODIFIED:${_DateTool.format("yyyyMMdd'T'HHmmss", $lastModified)}
+    ${location}
+    SEQUENCE:0
+    STATUS:CONFIRMED
+    ${summary}
+    TRANSP:OPAQUE
+    END:VEVENT
+  #end
+#end
+
+#*
+    Outputs a DAILY recurrence rule for daily events.
+
+    @param  $page the original event page
+*#
+#macro (outputDailyEvent $page)
+  #set ($recurrence = $page.getChild("system-data-structure").getChild("recurrence"))
+  
+  ## Add an "interval" property if a value is given.
+  #set ($interval = $recurrence.getChild("interval").value)
+  #set ($interval = "#getIntervalProperty($interval)")
+  #set ($interval = $interval.trim())
+
+  ## Add an "until" property if a value is given.
+  #set ($until = $recurrence.getChild("ends").value)
+  #set ($until = "#getUntilProperty($until)")
+  #set ($until = $until.trim())
+
+  RRULE:FREQ=DAILY${until}${interval}
+#end
+
+#*
+    Outputs a WEEKLY recurrence rule for weekly events.
+
+    @param  $page the original event page
+*#
+#macro (outputWeeklyEvent $page)
+  #set ($recurrence = $page.getChild("system-data-structure").getChild("recurrence"))
+
+  ## Add an "interval" property if a value is given.
+  #set ($interval = $recurrence.getChild("interval").value)
+  #set ($interval = "#getIntervalProperty($interval)")
+  #set ($interval = $interval.trim())
+
+  ## Add an "until" property if a value is given.
+  #set ($until = $recurrence.getChild("ends").value)
+  #set ($until = "#getUntilProperty($until)")
+  #set ($until = $until.trim())
+
+  #set ($days = $_XPathTool.selectNodes($recurrence, "day[count(value) > 0]/value"))
+  ## Loop through each chosen day and add the "byday".
+  #set ($byDay = "")
+  #foreach ($day in $days)
+     #set ($byDay = "${byDay},${daysMap.get($day.value)}")
+  #end
+  #set ($byDay = ";BYDAY=${byDay}")
+
+  RRULE:FREQ=WEEKLY${until}${interval}${byDay}
+#end
+
+#*
+    Outputs a MONTHLY recurrence rule for monthly events. 
+
+    Monthly events can occur on either the day of the month (ie 14th) or
+    day of the week (ie 2nd Monday).
+
+    @param  $page the original event page
+*#
+#macro (outputMonthlyEvent $page)
+  #set ($sds = $page.getChild("system-data-structure"))
+  #set ($recurrence = $sds.getChild("recurrence"))
+
+  #set ($start = $_DateTool.getDate($sds.getChild("starts").value))
+  #set ($startCal = $_DateTool.toCalendar($start))
+
+  ## Add an "interval" property if a value is given.
+  #set ($interval = $recurrence.getChild("interval").value)
+  #set ($interval = "#getIntervalProperty($interval)")
+  #set ($interval = $interval.trim())
+
+  ## Add an "until" property if a value is given.
+  #set ($until = $recurrence.getChild("ends").value)
+  #set ($until = "#getUntilProperty($until)")
+  #set ($until = $until.trim())
+
+  ## Add a property for either "day of month" or "day of week".
+  #set ($monthOrWeek = "")
+  #if ($recurrence.getChild("monthly-day").value == "day of the month")
+    #set ($monthOrWeek = ";BYMONTHDAY=${startCal.get(5)}")
+  #else
+    #set ($theDay = $daysMap.get($_DateTool.format("E", $start)))
+    #set ($monthOrWeek = ";BYDAY=${startCal.get(8)}${theDay}")    
+  #end
+
+  RRULE:FREQ=MONTHLY${until}${interval}${monthOrWeek}
+#end
+
+#*
+    Outputs a YEARLY recurrence rule for yearly events.
+
+    @param  $page the original event page
+*#
+#macro (outputYearlyEvent $page)
+  #set ($sds = $page.getChild("system-data-structure"))
+  #set ($recurrence = $sds.getChild("recurrence"))
+
+  ## Add an "interval" property if a value is given.
+  #set ($interval = $recurrence.getChild("interval").value)
+  #set ($interval = "#getIntervalProperty($interval)")
+  #set ($interval = $interval.trim())
+
+  ## Add an "until" property if a value is given.
+  #set ($until = $recurrence.getChild("ends").value)
+  #set ($until = "#getUntilProperty($until)")
+  #set ($until = $until.trim())
+
+  RRULE:FREQ=YEARLY${until}${interval}
+#end
+
+#*
+    Outputs the INTERVAL property for a recurrence rule.
+
+    @param  $interval the interval value
+*#
+#macro (getIntervalProperty $interval)
+  #set ($output = "")
+
+  ## If the interval is greater than 1, add an "interval" to the rule.
+  #if ($interval != "" && $interval != "1")
+    #set ($output = ";INTERVAL=${interval}")
+  #end
+
+  $output
+#end
+
+#*
+    Outputs the UNTIL property for a recurrence rule.
+
+    @param  $until the until value
+*#
+#macro (getUntilProperty $until)
+  #set ($output = "")
+
+  ## If the element value is not blank, create the "until" property
+  #if ($until && $until != "")
+    #set ($formatUntil = $_DateTool.format("yyyyMMdd", $_DateTool.getDate($until)))
+    #set ($output = ";UNTIL=${formatUntil}")
+  #end
+
+  $output
+#end
+
+#*
+    Escapes reserved/special characters found within iCal (ie "," and ";").
+
+    @param  $string the string to escape
+*#
+#macro (escapeReservedChars $string)
+  #set ($string = $string.replaceAll("\n", "\\n"))
+  #set ($string = $string.replaceAll("&#xD;", ""))
+  #set ($string = $string.replaceAll(",", "\\,"))
+  #set ($string = $string.replaceAll(";", "\\;"))
+  #set ($string = $string.replaceAll("--", "\\-"))  
+  $string
+#end
+
+#*
+    Splits a string into lines containing 75 characters (the length of
+    lines as determined by the iCal spec).
+
+    @param  $string the string to split
+*#
+#macro (splitLinetoLength $string)
+  #set ($string = "#escapeReservedChars($string)")
+  #set ($string = $string.trim())
+ 
+  #set ($originalStringLength = $string.length())
+
+  #if ($originalStringLength > 75)
+    #set ($newString = "")
+    #set ($chunks = $_MathTool.toInteger($_MathTool.div($originalStringLength, 75)))
+    #foreach ($i in [0..$chunks])
+      #set ($subStringStart = $_MathTool.mul($i, 74))
+      #set ($subStringEnd = $_MathTool.add($subStringStart, 74))
+      #if ($subStringEnd > $originalStringLength)
+        #set ($subStringEnd = $originalStringLength)
+      #end
+
+      #set ($newString = "${newString}
+      ${string.substring($subStringStart, $subStringEnd)}")
+    #end
+    #set ($string = $newString.trim())
+  #end
+
+  $string
+#end
