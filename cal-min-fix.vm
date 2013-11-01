@@ -1,0 +1,54 @@
+#set ($tzName = "America/Chicago")#set ($tzStandard = {"abbrev":"CST", "offset":"-0600"})#set ($tzDaylight = {"abbrev":"CDT", "offset":"-0500"})#set ($daysMap = {"Sun":"SU", "Mon":"MO", "Tue":"TU", "Wed":"WE", "Thu":"TH", "Fri":"FR", "Sat":"SA"})<!--#START-ROOT-CODE#outputICal()${_EscapeTool.h} #END-ROOT-CODE-->#macro (outputICal)#set ($callingPage = $_XPathTool.selectSingleNode($contentRoot, "//calling-page/system-page"))#set ($callingPageDesc = $callingPage.getChild("description").value)#set ($iCalName = $callingPage.getChild("title").value)#set ($iCalName = "#splitLinetoLength($iCalName)")#set ($iCalName = $iCalName.trim())#set ($iCalDesc = "X-WR-CALDESC:")#if ($callingPageDesc && $callingPageDesc != "")#set ($iCalDesc = "${iCalDesc}${callingPageDesc}")#set ($iCalDesc = "#splitLinetoLength($iCalDesc)")#set ($iCalDesc = $iCalDesc.trim())#end#set ($eventItems = "#outputEventItems()")#set ($eventItems = $eventItems.trim())
+#set ($finalOutput ="BEGIN:VCALENDAR
+PRODID:-//HH//NONSGML Cascade Server//EN
+VERSION:2.0
+X-WR-CALNAME:${iCalName}
+X-WR-TIMEZONE:${tzName}
+${iCalDesc}
+BEGIN:VTIMEZONE
+TZID:${tzName}
+BEGIN:DAYLIGHT
+TZOFFSETFROM:${tzStandard.get('offset')}
+TZOFFSETTO:${tzDaylight.get('offset')}
+TZNAME:${tzDaylight.get('abbrev')}
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:${tzDaylight.get('offset')}
+TZOFFSETTO:${tzStandard.get('offset')}
+TZNAME:${tzStandard.get('abbrev')}
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE
+$eventItems
+END:VCALENDAR")
+#set ($finalOutput = $finalOutput.replaceAll("\\\n", "\\\r\\\n"))
+$finalOutput
+#end#macro (outputEventItems)#set ($currentTime = $_XPathTool.selectSingleNode($contentRoot, "/system-index-block/@current-time").value)#set ($currentTime = $_DateTool.getDate($currentTime))#set ($categoriesXpath = "")#set ($categories = $_XPathTool.selectNodes($contentRoot, "/system-index-block/calling-page/system-page/dynamic-metadata[name='categories']/value"))#if ($categories.size() > 0)#foreach ($category in $categories)#if ($foreach.index == 0)#set ($categoriesXpath = "value = '${category.value}'")#else#set ($categoriesXpath = "${categoriesXpath} or value = '${category.value}'")#end#end#set ($categoriesXpath = "and (${categoriesXpath})")#end#set ($events = $_XPathTool.selectNodes($contentRoot, "/system-index-block//system-page[dynamic-metadata[name = 'categories' ${categoriesXpath}] and not(contains(path, '_cascade')) and not(@current)]"))#set ($output = "")#foreach ($event in $events)#set ($summary = "SUMMARY:")#set ($description = "DESCRIPTION:")#set ($location = "LOCATION:")#set ($dtStart = "DTSTART")#set ($dtEnd = "DTEND")#set ($sds = $event.getChild("system-data-structure"))#set ($start = $_DateTool.getDate($sds.getChild("starts").value))#set ($end = $_DateTool.getDate($sds.getChild("ends").value))#set ($eventId = $event.getAttribute("id").value)#set ($eventTitle = $event.getChild("title").value)#set ($eventSummary = $event.getChild("summary").value)#set ($eventLocation = $sds.getChild("location").value)#set ($lastModified = $_DateTool.getDate($event.getChild("last-modified").value))#set ($createdOn = $_DateTool.getDate($event.getChild("created-on").value))#set ($summary = $event.getChild("title").value)#set ($summary = "SUMMARY:${summary}")#set ($summary = "#splitLinetoLength($summary)")#set ($summary = $summary.trim())#if ($eventSummary && $eventSummary != "")#set ($description = "${description}${eventSummary}")#set ($description = "#splitLinetoLength($description)")#set ($description = $description.trim())#end#if ($eventLocation && $eventLocation != "")#set ($location = "${location}${eventLocation}")#set ($location = "#splitLinetoLength($location)")#set ($location = $location.trim())#end#set ($recurrenceOuput = "")#set ($frequency = $_XPathTool.selectSingleNode($sds, "recurrence/frequency").value)#if ($frequency == "Daily")#set ($recurrenceOuput = "#outputDailyEvent($event)")#elseif ($frequency == "Weekly")#set ($recurrenceOuput = "#outputWeeklyEvent($event)")#elseif ($frequency == "Monthly")#set ($recurrenceOuput = "#outputMonthlyEvent($event)")#elseif ($frequency == "Yearly")#set ($recurrenceOuput = "#outputYearlyEvent($event)")#end#set ($recurrenceOuput = $recurrenceOuput.trim())#if ($recurrenceOuput != "")#set ($recurrenceOuput = "
+${recurrenceOuput}")#end#if ($sds.getChild("all-day").value != "")#set ($formatStart = $_DateTool.format("yyyyMMdd", $start))#set ($dtStart = "${dtStart};VALUE=DATE:${formatStart}")#set ($formatEnd = $_DateTool.format("yyyyMMdd", $end))#set ($dtEnd = "${dtEnd};VALUE=DATE:${formatEnd}")#else#set ($formatStart = $_DateTool.format("yyyyMMdd'T'HHmmss", $start))#set ($dtStart = "${dtStart}:${formatStart}")#set ($formatEnd = $_DateTool.format("yyyyMMdd'T'HHmmss", $end))#set ($dtEnd = "${dtEnd}:${formatEnd}")#end
+BEGIN:VEVENT
+${dtStart}
+${dtEnd}${recurrenceOuput}
+DTSTAMP:${_DateTool.format("yyyyMMdd'T'HHmmss", $currentTime)}
+UID:${eventId}
+CREATED:${_DateTool.format("yyyyMMdd'T'HHmmss", $createdOn)}
+${description}
+LAST-MODIFIED:${_DateTool.format("yyyyMMdd'T'HHmmss", $lastModified)}
+${location}
+SEQUENCE:0
+STATUS:CONFIRMED
+${summary}
+TRANSP:OPAQUE
+END:VEVENT
+#end#end#macro (outputDailyEvent $page)#set ($recurrence = $page.getChild("system-data-structure").getChild("recurrence"))#set ($interval = $recurrence.getChild("interval").value)#set ($interval = "#getIntervalProperty($interval)")#set ($interval = $interval.trim())#set ($until = $recurrence.getChild("ends").value)#set ($until = "#getUntilProperty($until)")#set ($until = $until.trim())
+RRULE:FREQ=DAILY${until}${interval}
+#end#macro (outputWeeklyEvent $page)#set ($recurrence = $page.getChild("system-data-structure").getChild("recurrence"))#set ($interval = $recurrence.getChild("interval").value)#set ($interval = "#getIntervalProperty($interval)")#set ($interval = $interval.trim())#set ($until = $recurrence.getChild("ends").value)#set ($until = "#getUntilProperty($until)")#set ($until = $until.trim())#set ($days = $_XPathTool.selectNodes($recurrence, "day[count(value) > 0]/value"))#set ($byDay = "")#foreach ($day in $days)#set ($byDay = "${byDay},${daysMap.get($day.value)}")#end#set ($byDay = ";BYDAY=${byDay}")
+RRULE:FREQ=WEEKLY${until}${interval}${byDay}
+#end#macro (outputMonthlyEvent $page)#set ($sds = $page.getChild("system-data-structure"))#set ($recurrence = $sds.getChild("recurrence"))#set ($start = $_DateTool.getDate($sds.getChild("starts").value))#set ($startCal = $_DateTool.toCalendar($start))#set ($interval = $recurrence.getChild("interval").value)#set ($interval = "#getIntervalProperty($interval)")#set ($interval = $interval.trim())#set ($until = $recurrence.getChild("ends").value)#set ($until = "#getUntilProperty($until)")#set ($until = $until.trim())#set ($monthOrWeek = "")#if ($recurrence.getChild("monthly-day").value == "day of the month")#set ($monthOrWeek = ";BYMONTHDAY=${startCal.get(5)}")#else#set ($theDay = $daysMap.get($_DateTool.format("E", $start)))#set ($monthOrWeek = ";BYDAY=${startCal.get(8)}${theDay}")#end
+RRULE:FREQ=MONTHLY${until}${interval}${monthOrWeek}
+#end#macro (outputYearlyEvent $page)#set ($sds = $page.getChild("system-data-structure"))#set ($recurrence = $sds.getChild("recurrence"))#set ($interval = $recurrence.getChild("interval").value)#set ($interval = "#getIntervalProperty($interval)")#set ($interval = $interval.trim())#set ($until = $recurrence.getChild("ends").value)#set ($until = "#getUntilProperty($until)")#set ($until = $until.trim())
+RRULE:FREQ=YEARLY${until}${interval}
+#end#macro (getIntervalProperty $interval)#set ($output = "")#if ($interval != "" && $interval != "1")#set ($output = ";INTERVAL=${interval}")#end$output#end#macro (getUntilProperty $until)#set ($output = "")#if ($until && $until != "")#set ($formatUntil = $_DateTool.format("yyyyMMdd", $_DateTool.getDate($until)))#set ($output = ";UNTIL=${formatUntil}")#end$output#end#macro (escapeReservedChars $string)#set ($string = $string.replace(",", "\,"))#set ($string = $string.replace(";", "\;"))#set ($string = $string.replace("--", " "))#set ($string = $string.replace("
+", "")) $string#end#macro (splitLinetoLength $string)#set ($string = "#escapeReservedChars($string)")#set ($string = $string.trim())#set ($originalStringLength = $string.length())#if ($originalStringLength > 75)#set ($newString = "")#set ($chunks = $_MathTool.toInteger($_MathTool.div($originalStringLength, 75)))#foreach ($i in [0..$chunks])#set ($subStringStart = $_MathTool.mul($i, 74))#set ($subStringEnd = $_MathTool.add($subStringStart, 74))#if ($subStringEnd > $originalStringLength)#set ($subStringEnd = $originalStringLength)#end#set ($newString = "${newString}${string.substring($subStringStart, $subStringEnd)}")#end#set ($string = $newString.trim())#end$string#end
